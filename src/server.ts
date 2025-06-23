@@ -5,62 +5,59 @@ import app from "./app"
 // Load environment variables
 dotenv.config()
 
-// Database connection
+// Database connection with connection pooling for serverless
 const connectDB = async () => {
   try {
+    if (mongoose.connections[0].readyState) {
+      console.log("Already connected to MongoDB")
+      return
+    }
+
     const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017/library-management"
-    await mongoose.connect(mongoUri)
+    await mongoose.connect(mongoUri, {
+      bufferCommands: false,
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    })
     console.log("MongoDB connected successfully")
   } catch (error) {
     console.error("MongoDB connection error:", error)
-    process.exit(1)
+    throw error
   }
 }
 
-// Server configuration
-const PORT = process.env.PORT || 5000
-
-// Start server
-const startServer = async () => {
+// Serverless function handler
+const handler = async (req: any, res: any) => {
   try {
-    // Connect to database first
     await connectDB()
-
-    // Start the server
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`)
-     
-    })
+    return app(req, res)
   } catch (error) {
-    console.error("Failed to start server:", error)
-    process.exit(1)
+    console.error("Handler error:", error)
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error instanceof Error ? error.message : "Unknown error",
+    })
   }
 }
 
-// Handle unhandled promise rejections
-process.on("unhandledRejection", (err: Error) => {
-  console.error("Unhandled Promise Rejection:", err.message)
-  process.exit(1)
-})
+// For local development
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 5000
 
-// Handle uncaught exceptions
-process.on("uncaughtException", (err: Error) => {
-  console.error("Uncaught Exception:", err.message)
-  process.exit(1)
-})
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`)
+        console.log(`Environment: ${process.env.NODE_ENV || "development"}`)
+      })
+    })
+    .catch((error) => {
+      console.error("Failed to start server:", error)
+      process.exit(1)
+    })
+}
 
-// Graceful shutdown
-process.on("SIGTERM", async () => {
-  console.log("SIGTERM received. Shutting down gracefully...")
-  await mongoose.connection.close()
-  process.exit(0)
-})
-
-process.on("SIGINT", async () => {
-  console.log("SIGINT received. Shutting down gracefully...")
-  await mongoose.connection.close()
-  process.exit(0)
-})
-
-// Start the server
-startServer()
+// Export for Vercel
+export default handler
