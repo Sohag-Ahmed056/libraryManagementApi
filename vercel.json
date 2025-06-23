@@ -1,15 +1,21 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "dist/server.js",
-      "use": "@vercel/node"
+  "functions": {
+    "src/api/index.ts": {
+      "runtime": "@vercel/node"
     }
-  ],
+  },
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "/src/api/index.ts"
+    },
+    {
       "src": "/(.*)",
-      "dest": "dist/server.js"
+      "dest": "/src/api/index.ts"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
